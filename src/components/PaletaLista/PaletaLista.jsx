@@ -1,13 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "../../utils/api/api";
 import { PaletaListaItem } from "../PaletaListaItem/PaletaListaItem";
 import "./PaletaLista.css";
 import { PaletaDetalhesModal } from "../PaletaDetalhesModal/PaletaDetalhesModal";
+import { ActionMode } from "../../constants";
 
-export function PaletaLista({ paletaCriada, mode }) {
+export function PaletaLista({
+  paletaCriada,
+  paletaEditada,
+  mode,
+  updatePaLeta,
+  deletePaleta,
+  paletaRemovida,
+}) {
+  const selecionadas = JSON.parse(localStorage.getItem("selecionadas")) ?? {};
+
   const [paletas, setPaletas] = useState([]);
 
-  const [paletaSelecionada, setPaletaSelecionada] = useState({});
+  const [paletaSelecionada, setPaletaSelecionada] = useState(selecionadas);
 
   const [paletaModal, setPaletaModal] = useState(false);
 
@@ -27,6 +37,19 @@ export function PaletaLista({ paletaCriada, mode }) {
     setPaletaSelecionada({ ...paletaSelecionada, ...paleta });
   };
 
+  const setSelecionadas = useCallback(() => {
+    if (!paletas.length) return;
+
+    const entries = Object.entries(paletaSelecionada);
+    const sacola = entries.map((arr) => ({
+      paletaId: paletas[arr[0]]._id,
+      quantidade: arr[1],
+    }));
+
+    localStorage.setItem("sacola", JSON.stringify(sacola));
+    localStorage.setItem("selecionadas", JSON.stringify(paletaSelecionada));
+  });
+
   const getPaletas = async () => {
     const response = await api.getAllPaletas();
     setPaletas(response);
@@ -34,21 +57,40 @@ export function PaletaLista({ paletaCriada, mode }) {
 
   const getPaletaById = async (paletaId) => {
     const response = await api.getPaletaById(paletaId);
-    setPaletaModal(response);
+
+    const mapper = {
+      [ActionMode.NORMAL]: () => setPaletaModal(response),
+      [ActionMode.ATUALIZAR]: () => updatePaLeta(response),
+      [ActionMode.DELETAR]: () => deletePaleta(response),
+    };
+
+    mapper[mode]();
   };
 
-  const adicionaPaletaNaLista = (paleta) => {
-    const lista = [...paletas, paleta];
-    setPaletas(lista);
-  };
+  const adicionaPaletaNaLista = useCallback(
+    (paleta) => {
+      const lista = [...paletas, paleta];
+      setPaletas(lista);
+    },
+    [paletas]
+  );
 
   useEffect(() => {
-    if (paletaCriada) adicionaPaletaNaLista(paletaCriada);
-  }, [paletaCriada]);
+    setSelecionadas();
+  }, [setSelecionadas, paletaSelecionada]);
+
+  useEffect(() => {
+    if (
+      paletaCriada &&
+      !paletas.map(({ id }) => id).includes(paletaCriada.id)
+    ) {
+      adicionaPaletaNaLista(paletaCriada);
+    }
+  }, [paletaCriada, adicionaPaletaNaLista, paletas]);
 
   useEffect(() => {
     getPaletas();
-  }, []);
+  }, [paletaEditada, paletaRemovida, paletas]);
 
   return (
     <div className="PaletaLista">
